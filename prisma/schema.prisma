@@ -1,0 +1,126 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+// For SQLite testing: provider = "sqlite", DATABASE_URL = "file:./dev.db"
+// For MySQL production: change provider to "mysql" and set DATABASE_URL = "mysql://user:pass@host:3306/vendorpurchase"
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                   String   @id @default(uuid())
+  accountType          String   @map("account_type") // "Admin" | "Vendor"
+  name                 String
+  email                String   @unique
+  passwordHash         String   @map("password_hash")
+  company              String?
+  role                 String   @default("Vendor")
+  isActive             Boolean  @default(true) @map("is_active")
+  approved             Boolean  @default(true)
+  allowedVerticals     Json     @map("allowed_verticals")
+  allowedLocations     Json     @map("allowed_locations")
+  userPermissions      Json     @map("user_permissions")
+  inventoryPermissions Json     @map("inventory_permissions")
+  menuPermissions      Json     @map("menu_permissions")
+  modulePermissions    Json     @map("module_permissions")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  stockTransactions StockTransaction[]
+  auditLogs         InventoryAuditLog[]
+
+  @@index([accountType, isActive])
+  @@map("users")
+}
+
+model InventoryProduct {
+  id                String   @id @default(uuid())
+  sku               String   @unique
+  barcode           String?
+  inventoryCategory String   @map("inventory_category") // "Grocery" | "Pharmacy" | "Mall"
+  productName       String   @map("product_name")
+  brand             String?
+  productCategory   String?  @map("product_category")
+  supplier          String?
+  purchasePrice     Decimal  @map("purchase_price")
+  sellingPrice      Decimal  @map("selling_price")
+  mrp               Decimal
+  gstPercent        Decimal  @default(0) @map("gst_percent")
+  unitOfMeasurement String   @default("pcs") @map("unit_of_measurement")
+  stockQuantity     Decimal  @default(0) @map("stock_quantity")
+  minimumStockLevel Decimal  @default(0) @map("minimum_stock_level")
+  maximumStockLevel Decimal  @default(0) @map("maximum_stock_level")
+  status            String   @default("ACTIVE")
+  storeLocation     String   @map("store_location")
+  categoryFields    Json     @map("category_fields")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  pharmacyBatches   PharmacyBatch[]
+  stockTransactions StockTransaction[]
+
+  @@index([barcode])
+  @@index([inventoryCategory, storeLocation, status])
+  @@index([stockQuantity, minimumStockLevel])
+  @@map("inventory_products")
+}
+
+model PharmacyBatch {
+  id                String    @id @default(uuid())
+  productId         String    @map("product_id")
+  batchNumber       String    @map("batch_number")
+  manufacturingDate DateTime? @map("manufacturing_date")
+  expiryDate        DateTime  @map("expiry_date")
+  quantity          Decimal   @default(0)
+  purchasePrice     Decimal   @map("purchase_price")
+  sellingPrice      Decimal   @map("selling_price")
+  mrp               Decimal
+  location          String?
+
+  product InventoryProduct @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@index([productId, expiryDate])
+  @@index([batchNumber])
+  @@map("pharmacy_batches")
+}
+
+model StockTransaction {
+  id                String   @id @default(uuid())
+  referenceNumber   String   @map("reference_number")
+  productId         String   @map("product_id")
+  batchNumber       String?  @map("batch_number")
+  transactionType   String   @map("transaction_type") // "ADDITION" | "REDUCTION" | "ADJUSTMENT" | "TRANSFER"
+  quantity          Decimal
+  previousQuantity  Decimal  @map("previous_quantity")
+  newQuantity       Decimal  @map("new_quantity")
+  reason            String?
+  performedByUserId String   @map("performed_by_user_id")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  product         InventoryProduct @relation(fields: [productId], references: [id], onDelete: Restrict)
+  performedByUser User             @relation(fields: [performedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([productId, createdAt])
+  @@index([performedByUserId])
+  @@index([referenceNumber])
+  @@map("stock_transactions")
+}
+
+model InventoryAuditLog {
+  id                String   @id @default(uuid())
+  entityType        String   @map("entity_type")
+  entityId          String   @map("entity_id")
+  operation         String
+  beforeSnapshot    Json?    @map("before_snapshot")
+  afterSnapshot     Json?    @map("after_snapshot")
+  performedByUserId String   @map("performed_by_user_id")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  performedByUser User @relation(fields: [performedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([entityType, entityId])
+  @@index([performedByUserId, createdAt])
+  @@map("inventory_audit_logs")
+}
